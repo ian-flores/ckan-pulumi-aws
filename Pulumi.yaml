@@ -1,0 +1,3 @@
+name: ckan-pulumi-aws
+runtime: go
+description: Pulumi stack for deploying CKAN in AWS
