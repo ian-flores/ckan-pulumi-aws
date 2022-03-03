@@ -1,2 +1,6 @@
 config:
   aws:region: us-east-2
+  ckan-pulumi-aws:Vpc:
+    CidrBlock: "10.0.0.0/21"
+    PublicSubnetCidrBlock: "10.0.1.0/24"
+    PrivateSubnetCidrBlock: "10.0.2.0/24"
