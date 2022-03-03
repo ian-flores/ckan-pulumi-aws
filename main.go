@@ -70,6 +70,51 @@ func main() {
 
 		errorHandler(err)
 
+		// Create the public subnet NACL
+
+		publicSubnetNacl, err := ec2.NewNetworkAcl(ctx, "ckan-pulumi-public-subnet-nacl", &ec2.NetworkAclArgs{
+			VpcId: vpc.ID(),
+			Egress: ec2.NetworkAclEgressArray{
+				&ec2.NetworkAclEgressArgs{
+					Protocol:  pulumi.String("tcp"),
+					Action:    pulumi.String("allow"),
+					CidrBlock: pulumi.String("0.0.0.0/0"),
+					RuleNo:    pulumi.Int(100),
+					FromPort:  pulumi.Int(0),
+					ToPort:    pulumi.Int(0),
+				},
+				&ec2.NetworkAclEgressArgs{
+					Protocol:  pulumi.String("-1"),
+					Action:    pulumi.String("deny"),
+					CidrBlock: pulumi.String("0.0.0.0/0"),
+					RuleNo:    pulumi.Int(50),
+					FromPort:  pulumi.Int(0),
+					ToPort:    pulumi.Int(0),
+				},
+			},
+			Ingress: ec2.NetworkAclIngressArray{
+				&ec2.NetworkAclIngressArgs{
+					Protocol:  pulumi.String("tcp"),
+					Action:    pulumi.String("allow"),
+					CidrBlock: pulumi.String("0.0.0.0/0"),
+					RuleNo:    pulumi.Int(100),
+					FromPort:  pulumi.Int(80),
+					ToPort:    pulumi.Int(80),
+				},
+				&ec2.NetworkAclIngressArgs{
+					Protocol:  pulumi.String("-1"),
+					Action:    pulumi.String("deny"),
+					CidrBlock: pulumi.String("0.0.0.0/0"),
+					RuleNo:    pulumi.Int(50),
+					FromPort:  pulumi.Int(0),
+					ToPort:    pulumi.Int(0),
+				},
+			},
+			SubnetIds: pulumi.StringArray{publicSubnet.ID()},
+		})
+
+		errorHandler(err)
+
 		// Create the private subnet
 		privateSubnet, err := ec2.NewSubnet(ctx, "ckan-pulumi-private-subnet", &ec2.SubnetArgs{
 			VpcId:               vpc.ID(),
@@ -87,11 +132,117 @@ func main() {
 
 		errorHandler(err)
 
+		// Create the private subnet NACL
+		privateSubnetNacl, err := ec2.NewNetworkAcl(ctx, "ckan-pulumi-private-subnet-nacl", &ec2.NetworkAclArgs{
+			VpcId: vpc.ID(),
+			Egress: ec2.NetworkAclEgressArray{
+				&ec2.NetworkAclEgressArgs{
+					Protocol:  pulumi.String("tcp"),
+					Action:    pulumi.String("allow"),
+					CidrBlock: pulumi.String(VpcConfig.PublicSubnetCidrBlock),
+					RuleNo:    pulumi.Int(100),
+					FromPort:  pulumi.Int(0),
+					ToPort:    pulumi.Int(0),
+				},
+				&ec2.NetworkAclEgressArgs{
+					Protocol:  pulumi.String("-1"),
+					Action:    pulumi.String("deny"),
+					CidrBlock: pulumi.String("0.0.0.0/0"),
+					RuleNo:    pulumi.Int(50),
+					FromPort:  pulumi.Int(0),
+					ToPort:    pulumi.Int(0),
+				},
+			},
+			Ingress: ec2.NetworkAclIngressArray{
+				&ec2.NetworkAclIngressArgs{
+					Protocol:  pulumi.String("tcp"),
+					Action:    pulumi.String("allow"),
+					CidrBlock: pulumi.String(VpcConfig.PublicSubnetCidrBlock),
+					RuleNo:    pulumi.Int(100),
+					FromPort:  pulumi.Int(5432),
+					ToPort:    pulumi.Int(5432),
+				},
+				&ec2.NetworkAclIngressArgs{
+					Protocol:  pulumi.String("-1"),
+					Action:    pulumi.String("deny"),
+					CidrBlock: pulumi.String("0.0.0.0/0"),
+					RuleNo:    pulumi.Int(50),
+					FromPort:  pulumi.Int(0),
+					ToPort:    pulumi.Int(0),
+				},
+			},
+			SubnetIds: pulumi.StringArray{privateSubnet.ID()},
+		})
+
+		errorHandler(err)
+
+		// Create the security group for the RDS instance
+		rdsSG, err := ec2.NewSecurityGroup(ctx, "ckan-pulumi-rds-sg", &ec2.SecurityGroupArgs{
+			VpcId: vpc.ID(),
+			Egress: ec2.SecurityGroupEgressArray{
+				&ec2.SecurityGroupEgressArgs{
+					CidrBlocks: pulumi.StringArray{
+						pulumi.String(VpcConfig.PublicSubnetCidrBlock),
+					},
+					FromPort:    pulumi.Int(0),
+					ToPort:      pulumi.Int(0),
+					Protocol:    pulumi.String("-1"),
+					Description: pulumi.String("Allow all outbound traffic to the public subnet"),
+				},
+			},
+			Ingress: ec2.SecurityGroupIngressArray{
+				&ec2.SecurityGroupIngressArgs{
+					CidrBlocks: pulumi.StringArray{
+						pulumi.String(VpcConfig.PublicSubnetCidrBlock),
+					},
+					FromPort:    pulumi.Int(5432),
+					ToPort:      pulumi.Int(5432),
+					Protocol:    pulumi.String("tcp"),
+					Description: pulumi.String("Allow access to the RDS instance from the public subnet"),
+				},
+			},
+		})
+
+		errorHandler(err)
+
+		// Create the security group for the web server
+		webSG, err := ec2.NewSecurityGroup(ctx, "ckan-pulumi-web-sg", &ec2.SecurityGroupArgs{
+			VpcId: vpc.ID(),
+			Egress: ec2.SecurityGroupEgressArray{
+				&ec2.SecurityGroupEgressArgs{
+					CidrBlocks: pulumi.StringArray{
+						pulumi.String("0.0.0.0/0"),
+					},
+					FromPort:    pulumi.Int(0),
+					ToPort:      pulumi.Int(0),
+					Protocol:    pulumi.String("-1"),
+					Description: pulumi.String("Allow all outbound traffic"),
+				},
+			},
+			Ingress: ec2.SecurityGroupIngressArray{
+				&ec2.SecurityGroupIngressArgs{
+					CidrBlocks: pulumi.StringArray{
+						pulumi.String("0.0.0.0/0"),
+					},
+					FromPort:    pulumi.Int(80),
+					ToPort:      pulumi.Int(80),
+					Protocol:    pulumi.String("tcp"),
+					Description: pulumi.String("Allow access to the web server from the internet"),
+				},
+			},
+		})
+
+		errorHandler(err)
+
 		ctx.Export("vpc", vpc.ID())
 		ctx.Export("igw", igw.ID())
 		ctx.Export("rt", rt.ID())
 		ctx.Export("publicSubnet", publicSubnet.ID())
+		ctx.Export("publicSubnetNacl", publicSubnetNacl.ID())
 		ctx.Export("privateSubnet", privateSubnet.ID())
+		ctx.Export("privateSubnetNacl", privateSubnetNacl.ID())
+		ctx.Export("rdsSG", rdsSG.ID())
+		ctx.Export("webSG", webSG.ID())
 
 		return nil
 	})
